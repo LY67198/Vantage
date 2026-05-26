@@ -1,4 +1,4 @@
-# Vantage — 企业智能决策中台
+# 洞见 (Vantage) — 企业智能决策中台
 
 基于 LangGraph 多 Agent 协作架构的企业级 AI 决策平台。用自然语言提问，系统自动调度 SQL Agent 查询数据、RAG Agent 检索文档，融合生成带数据表格与来源引用的完整分析报告。
 
