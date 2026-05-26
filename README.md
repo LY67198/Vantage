@@ -139,7 +139,7 @@ vantage/
 
 ## 快速开始
 
-**环境要求：** Python 3.11+，Docker
+**环境要求：** Python 3.10+
 
 **1. 克隆项目**
 
@@ -233,12 +233,8 @@ SCENARIOS = {
 ## 依赖
 
 ```
-langgraph >= 1.0
-langchain >= 0.3
-langchain-openai
-chromadb
-redis
-fastapi
-streamlit
+langgraph >= 1.2
+langchain >= 1.3
+langchain-openai >= 1.2
 python-dotenv
 ```
