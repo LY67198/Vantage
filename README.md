@@ -130,12 +130,12 @@ decision-platform/
 **1. 安装依赖**
 
 ```bash
-pip install -e .
+cd decision-platform && uv sync
 ```
 
 **2. 配置环境变量**
 
-在项目根目录创建 `.env`：
+在 `decision-platform/` 目录下创建 `.env`：
 
 ```
 API_KEY=your_deepseek_api_key
@@ -146,7 +146,7 @@ MODEL=deepseek-chat
 **3. 运行终端 Demo（Phase 1）**
 
 ```bash
-python main.py
+uv run python main.py
 ```
 
 **4. 启动完整服务（Phase 4）**
