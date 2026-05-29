@@ -105,7 +105,7 @@ decision-platform/
 │   └── knowledge_base.py    # RAG Agent Mock 数据源
 ├── graph/
 │   ├── state.py             # AgentState 定义
-│   ├── llm.py               # LLM 单例配置
+│   ├── llm.py               # LLM 懒加载单例
 │   ├── orchestrator.py      # Orchestrator 节点
 │   ├── sql_agent.py         # SQL Agent — ReAct 循环
 │   ├── rag_agent.py         # RAG Agent — ReAct 循环
@@ -161,11 +161,11 @@ docker compose up -d
 
 | 场景 | 策略 |
 |------|------|
-| LLM 调用失败 | RetryPolicy 自动重试 3 次（指数退避，backoff_factor=2.0） |
+| LLM 调用失败（Orchestrator/SQL/RAG） | RetryPolicy 自动重试 3 次（指数退避，backoff_factor=2.0） |
 | SQL 查询异常 | 返回错误标记，报告标注「数据暂不可用」 |
 | RAG 检索无结果 | 返回空列表，报告标注「未找到相关文档」 |
 | 双路同时失败 | 前置检查，直接返回明确错误提示 |
-| Report 生成失败 | 降级为模板拼接，保证有输出 |
+| Report LLM 调用失败 | 节点内部重试 2 次 → 降级为模板拼接，保证有输出 |
 
 ---
 
