@@ -40,10 +40,15 @@ def sql_agent_node(state: AgentState) -> dict:
             # 本轮无工具调用，记录原因并退出
             content = response.content if hasattr(response, "content") else str(response)
             log_agent_step("SQL", "❌ 未生成查询", content[:300])
-            return {
-                "sql_result": [{"error": "LLM 未生成 SQL 查询", "detail": content[:200]}],
-                "messages": messages,
-            }
+            if i == 0:
+                # 第一轮就不调工具：LLM 无法生成 SQL
+                log_agent_step("SQL", "⚠️ 未生成查询", content[:300])
+                return {
+                    "sql_result": [{"error": "LLM 未生成工具调用", "raw_output": content}],
+                    "messages": messages,
+                }
+            log_agent_step("sql","✅推理完成",content[:300])
+            break
 
         for tool_call in response.tool_calls:
             tool_name = tool_call.get("name")
