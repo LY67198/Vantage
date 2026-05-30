@@ -1,5 +1,9 @@
 """结构化终端日志。"""
+import sys
 import time
+
+# Windows GBK 终端无法输出 emoji，强制 UTF-8
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 RESET = "\033[0m"
 COLORS = {

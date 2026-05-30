@@ -1,6 +1,7 @@
 """Report Agent — 融合 SQL 和 RAG 结果，生成 Markdown 分析报告。"""
-
 from graph.state import AgentState
+from graph.llm import get_llm
+from utils.logger import log_agent_step
 
 FALLBACK_TEMPLATE = """## 分析报告（降级模式）
 
@@ -17,6 +18,14 @@ FALLBACK_TEMPLATE = """## 分析报告（降级模式）
 def _fallback_report(sql_result: list, rag_result: list) -> str:
     """LLM 调用失败时的降级模板拼接，保证始终有输出。"""
     ...
+    sql_summary = sql_result[0] if sql_result else {}
+    rag_titles = [d.get("title","") for d in rag_result] if rag_result else []
+
+    return FALLBACK_TEMPLATE.format(
+            sql_summary = sql_summary if sql_summary else "数据暂时不可用",
+            rag_summary = " /".jion(rag_titles) if rag_titles else "未找到相关文档",
+
+    )
 
 
 def report_agent_node(state: AgentState) -> dict:
@@ -26,23 +35,38 @@ def report_agent_node(state: AgentState) -> dict:
     LLM 调用失败 → 内部重试 1 次 → 降级为 FALLBACK_TEMPLATE 模板拼接。
     """
     ...
+    llm = get_llm()
+    sql_result = state.get("sql_result",[])
+    rag_result = state.get("rag_result",[])
 
-# 实现要点：
-# 1. from graph.llm import get_llm; llm = get_llm()
-# 2. 从 state 获取 sql_result 和 rag_result（用 .get() 防御性取值）
-# 3. sql_ok = bool(sql_result) and isinstance(sql_result[0], dict) and "error" not in sql_result[0]
-#    （用 isinstance 防止空 dict 误判，不用 (sql_result[0] or {}) 这种脆弱写法）
-# 4. rag_ok = len(rag_result) > 0
-# 5. 前置检查：if not sql_ok and not rag_ok → 返回 "⚠️ 数据服务暂时不可用..."
-# 6. 构造 prompt，融合用户问题 + SQL 结果 + RAG 结果，要求生成 Markdown 报告
-# 7. LLM 调用做 2 次尝试（内部重试，不依赖 RetryPolicy）：
-#    for attempt in range(2):
-#        try: response = llm.invoke(prompt); report = response.content; break
-#        except Exception:
-#            if attempt == 1: report = _fallback_report(sql_result, rag_result)
-# 8. _fallback_report 中不要直接把 list 拼进字符串，提取结构化字段后再 format
-# 9. log_agent_step("RPT", ...) 记录日志
-# 10. 返回 {"report": report}
-#
-# 注意：RetryPolicy 绑定在 report_agent 上不会生效（内部 try/except 吃掉了异常），
-# 这是有意为之 — 降级兜底优先于无限重试。如后续需要 RetryPolicy 接管，去掉内部 try/except。
+    sql_ok = bool(sql_result) and isinstance(sql_result[0],dict) and "error" not in sql_result[0]
+    rag_ok = len(rag_result) > 0
+
+    if not sql_ok and rag_ok:
+        repory = "数据库服务不可用，请稍后再试！"
+        log_agent_step("RPT","双路不可用",repory)
+        return{"report":repory}
+        
+    prompt = (
+    "请基于以下 SQL 结果和 RAG 文档证据，生成一份 Markdown 分析报告。\n\n"
+    "要求：\n"
+    "1. 包含数据摘要表格\n"
+    "2. 解释业绩变化原因\n"
+    "3. 引用文档来源\n"
+    f"4. 如有数据缺失，明确标注\n"
+    f"\n用户问题：{state['user_query']}"
+    f"\nSQL 结果：{sql_result}"
+    f"\nRAG 结果：{rag_result}"
+)
+        
+    for attempt in range(2):
+        try:
+            response = llm.invoke(prompt)
+            report = response.content
+            break
+        except Exception:
+            if attempt == 1:
+                report = _fallback_report(sql_result,rag_result)
+    log_agent_step("RPT","报告生成",report,max_len=800)
+
+    return{"report":report}

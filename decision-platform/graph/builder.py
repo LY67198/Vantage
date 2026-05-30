@@ -2,6 +2,10 @@
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
+from graph.sql_agent import sql_agent_node
+from graph.rag_agent import rag_agent_node
+from graph.report_agent import report_agent_node
+from graph.orchestrator import orchestrator_node
 
 from graph.state import AgentState
 
@@ -18,7 +22,10 @@ def dispatch_workers(state: AgentState) -> list[Send]:
     Phase 2 替换为条件路由：根据 orchestrator 输出动态决定启动哪些 Agent。
     """
     ...
-
+    return[
+        Send("sql_agent",state),
+        Send("rag_agent",state),
+    ]
 
 def build_graph():
     """构建 StateGraph，组装 4 个节点并配置 Send API 并行 + join 语义。
@@ -26,20 +33,18 @@ def build_graph():
     返回 compiled graph，可直接 app.invoke(initial_state)。
     """
     ...
+    workflow = StateGraph(AgentState)
+    workflow.add_node("Orchestrator",orchestrator_node,retry_policy=retry_policy)
+    workflow.add_node("sql_agent",sql_agent_node,retry_policy=retry_policy)
+    workflow.add_node("rag_agent",rag_agent_node,retry_policy=retry_policy)
+    workflow.add_node("report_agent",report_agent_node,retry_policy=retry_policy)
 
-# 实现要点：
-# 1. workflow = StateGraph(AgentState)
-# 2. 添加 4 个节点（均绑定 retry_policy）:
-#    workflow.add_node("orchestrator", orchestrator_node, retry_policy=retry_policy)
-#    workflow.add_node("sql_agent", sql_agent_node, retry_policy=retry_policy)
-#    workflow.add_node("rag_agent", rag_agent_node, retry_policy=retry_policy)
-#    workflow.add_node("report_agent", report_agent_node, retry_policy=retry_policy)
-# 3. 连线：
-#    workflow.add_edge(START, "orchestrator")
-#    workflow.add_conditional_edges("orchestrator", dispatch_workers)
-#    workflow.add_edge(["sql_agent", "rag_agent"], "report_agent")  # list 语法已验证支持
-#    workflow.add_edge("report_agent", END)
-# 4. return workflow.compile()
-#
-# dispatch_workers 实现：
-#   return [Send("sql_agent", state), Send("rag_agent", state)]
+    workflow.add_edge(START,"Orchestrator")
+    workflow.add_conditional_edges( "Orchestrator",dispatch_workers)
+    workflow.add_edge(["sql_agent","rag_agent"],"report_agent")
+    workflow.add_edge("report_agent",END)
+
+    return workflow.compile()
+
+
+
