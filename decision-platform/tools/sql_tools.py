@@ -1,18 +1,42 @@
 """SQL 工具 — execute_query。"""
 from langchain_core.tools import tool
-from mock_data.crm_sales import SCENARIOS
+import psycopg2
+import os
 
+
+def get_db_conn():
+    return psycopg2.connect(
+        host=os.getenv("DB_HOST", "localhost"),
+        port=os.getenv("DB_PORT", 5432),
+        dbname=os.getenv("DB_NAME", "vantage"),
+        user=os.getenv("DB_USER", "postgres"),
+    )
+
+from decimal import Decimal
 
 @tool
-def execute_query(sql:str)->dict:
+def execute_query(sql: str) -> dict:
     """执行销售数据查询。"""
-    scenario = "q2_east_china"
-    data = SCENARIOS.get(scenario)
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute(sql)
+        columns = [desc[0] for desc in cur.description]
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
 
-    if not data:
-        return {"error":f"未找到场景:{scenario}","sql_executed":sql}
-    
-    return {
-        **data,
-        "sql_executed":sql or data.get("sql_executed","")
-    }
+        # Decimal → float，避免序列化问题
+        def convert(val):
+            return float(val) if isinstance(val, Decimal) else val
+
+        return {
+            "columns": columns,
+            "rows": [
+                {col: convert(val) for col, val in zip(columns, row)}
+                for row in rows
+            ],
+            "sql_executed": sql,
+        }
+    except Exception as e:
+        return {"error": str(e), "sql_executed": sql}
