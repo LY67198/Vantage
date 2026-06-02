@@ -43,6 +43,9 @@ Desktop.ini
 .cache/
 *.cache
 
+# ChromaDB 向量数据库
+chroma_data/
+
 # 项目计划文档（仅本地）
 2026-05-26-decision-platform-design.md
 decision-platform-plan.md
