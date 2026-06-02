@@ -3,7 +3,7 @@
 from graph.state import AgentState
 from tools.rag_tools import search_docs
 from graph.llm import get_llm
-from langchain.messages import HumanMessage,ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from utils.logger import log_agent_step
 
 MAX_ITERATIONS = 3
@@ -16,7 +16,6 @@ def rag_agent_node(state: AgentState) -> dict:
         [{"title": "...", "content": "...", "source": "...", "score": 0.92}, ...]
     无结果时返回 []，下游 Report Agent 可据此标注「未找到相关文档」。
     """
-    ...
     llm = get_llm()
     llm_with_tool = llm.bind_tools([search_docs])
     messages = [
@@ -38,12 +37,12 @@ def rag_agent_node(state: AgentState) -> dict:
 
         if not response.tool_calls:
             content = response.content if hasattr(response,"content") else str(response)
-            log_agent_step("rag"," 检索未完成",content[:300])
+            log_agent_step("RAG"," 检索未完成",content[:300])
             if i == 0:
 
-                log_agent_step("rag","未生成查询",content[:300])
+                log_agent_step("RAG","未生成查询",content[:300])
                 return {"rag_result": [{"error": "LLM 未生成工具调用", "raw_output": content}], "messages": messages}
-            log_agent_step("rag","检索完成",content[:300])
+            log_agent_step("RAG","检索完成",content[:300])
             break
     
         for tool_call in response.tool_calls:
@@ -52,7 +51,7 @@ def rag_agent_node(state: AgentState) -> dict:
                 continue
             tool_args = tool_call.get("args",{})
             rag_text = tool_args.get("query","")
-            log_agent_step("rag","检索",rag_text[:200])
+            log_agent_step("RAG","检索",rag_text[:200])
 
             docs = search_docs.invoke(tool_args)
             collected_docs.extend(docs)

@@ -21,8 +21,7 @@ def dispatch_workers(state: AgentState) -> list[Send]:
 
     Phase 2 替换为条件路由：根据 orchestrator 输出动态决定启动哪些 Agent。
     """
-    ...
-    return[
+    return [
         Send("sql_agent",state),
         Send("rag_agent",state),
     ]
@@ -32,7 +31,6 @@ def build_graph():
 
     返回 compiled graph，可直接 app.invoke(initial_state)。
     """
-    ...
     workflow = StateGraph(AgentState)
     workflow.add_node("Orchestrator",orchestrator_node,retry_policy=retry_policy)
     workflow.add_node("sql_agent",sql_agent_node,retry_policy=retry_policy)

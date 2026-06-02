@@ -21,7 +21,7 @@ for region, city_list in cities.items():
         for year in [2024, 2025]:
             for month in range(1, 7):
                 # 华东 2025 Q2 刻意做低，支撑验收场景
-                if region == "华东" and year == 12025 and month >= 4:
+                if region == "华东" and year == 2025 and month >= 4:
                     base = 400
                 else:
                     base = 550

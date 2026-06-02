@@ -21,7 +21,7 @@ def get_embedding_model():
     global _model
     if _model is None:
         _model = DashScopeEmbeddings(
-            dashscope_api_key=os.getenv("EMBEDEDDING_API_KEY"),
+            dashscope_api_key=os.getenv("EMBEDDING_API_KEY"),
             model=os.getenv("MODEL_NAME")
         )
     return _model

@@ -17,8 +17,6 @@ def search_docs(query:str,top_k:int=3)->list[dict]:
         include=["documents", "metadatas", "distances"]
     )
 
-    print("原始distances：", results["distances"])  # 加这行
-
     docs = []
     for doc, meta, dist in zip(
         results["documents"][0],
