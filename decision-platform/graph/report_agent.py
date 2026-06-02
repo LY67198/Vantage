@@ -23,7 +23,7 @@ def _fallback_report(sql_result: list, rag_result: list) -> str:
 
     return FALLBACK_TEMPLATE.format(
             sql_summary = sql_summary if sql_summary else "数据暂时不可用",
-            rag_summary = " /".jion(rag_titles) if rag_titles else "未找到相关文档",
+            rag_summary = " / ".join(rag_titles) if rag_titles else "未找到相关文档",
 
     )
 
@@ -42,10 +42,10 @@ def report_agent_node(state: AgentState) -> dict:
     sql_ok = bool(sql_result) and isinstance(sql_result[0],dict) and "error" not in sql_result[0]
     rag_ok = len(rag_result) > 0
 
-    if not sql_ok and rag_ok:
-        repory = "数据库服务不可用，请稍后再试！"
-        log_agent_step("RPT","双路不可用",repory)
-        return{"report":repory}
+    if not sql_ok and not rag_ok:
+        report = "数据服务暂时不可用，请稍后重试。"
+        log_agent_step("RPT","双路不可用",report)
+        return {"report": report}
         
     prompt = (
     "请基于以下 SQL 结果和 RAG 文档证据，生成一份 Markdown 分析报告。\n\n"

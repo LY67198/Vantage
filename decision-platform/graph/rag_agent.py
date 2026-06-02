@@ -51,7 +51,7 @@ def rag_agent_node(state: AgentState) -> dict:
             if tool_name != "search_docs":
                 continue
             tool_args = tool_call.get("args",{})
-            rag_text = tool_args.get("RAG","") 
+            rag_text = tool_args.get("query","")
             log_agent_step("rag","检索",rag_text[:200])
 
             docs = search_docs.invoke(tool_args)
