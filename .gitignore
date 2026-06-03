@@ -49,6 +49,9 @@ chroma_data/
 # 测试文件（仅本地）
 decision-platform/tests/
 
+# 测试脚本（仅本地）
+decision-platform/scripts/
+
 # 项目计划文档（仅本地）
 2026-05-26-decision-platform-design.md
 decision-platform-plan.md

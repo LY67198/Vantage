@@ -1,12 +1,30 @@
 """RAG 工具 — search_docs。"""
+import redis
+import json
+import os 
 from langchain_core.tools import tool
 from utils.chroma_client import get_collection,get_embedding_model
 
+r = redis.Redis(
+    host=os.getenv("REDIS_HOST","localhost"),
+    port=int(os.getenv("REDIS_PORT",6379)),
+    decode_responses=True
+)
 
 
 @tool
 def search_docs(query:str,top_k:int=3)->list[dict]:
-    """检索知识库文档。"""
+    """检索知识库文档,优先读缓存"""
+
+    cache_key = f"rag:{query}:{top_k}"
+
+    cached = r.get(cache_key)
+
+    if cached:
+        print("缓存命中")
+        return json.loads(cached)
+
+
     model = get_embedding_model()
     collection = get_collection()
 
@@ -32,5 +50,6 @@ def search_docs(query:str,top_k:int=3)->list[dict]:
                 "score": score,
             })
 
+    r.set(cache_key,json.dumps(docs,ensure_ascii=False),ex=3600)
     return docs
 

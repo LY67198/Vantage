@@ -13,6 +13,7 @@ dependencies = [
     "sentence-transformers>=5.5.1",
     "langchain-community>=0.4.2",
     "dashscope>=1.25.20",
+    "redis>=8.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
