@@ -67,6 +67,6 @@ def report_agent_node(state: AgentState) -> dict:
         except Exception:
             if attempt == 1:
                 report = _fallback_report(sql_result,rag_result)
-    log_agent_step("RPT","报告生成",report,max_len=800)
+    log_agent_step("RPT","报告生成",f"报告已生成，共 {len(report)} 字符")
 
     return{"report":report}

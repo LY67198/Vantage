@@ -13,10 +13,10 @@ r = redis.Redis(
 
 
 @tool
-def search_docs(query:str,top_k:int=3)->list[dict]:
-    """检索知识库文档,优先读缓存"""
+def search_docs(query:str,top_k:int=3,score_threshold:float=0.2)->list[dict]:
+    """检索知识库文档,优先读缓存。score_threshold 控制最低相似度门槛。"""
 
-    cache_key = f"rag:{query}:{top_k}"
+    cache_key = f"rag:{query}:{top_k}:v2"
 
     cached = r.get(cache_key)
 
@@ -42,7 +42,7 @@ def search_docs(query:str,top_k:int=3)->list[dict]:
         results["distances"][0]
     ):
         score = round(1 - dist, 4)
-        if score >= 0.7:
+        if score >= score_threshold:
             docs.append({
                 "title": meta.get("title", ""),
                 "content": doc,

@@ -16,6 +16,9 @@ def sql_agent_node(state: AgentState) -> dict:
         {"columns": [...], "rows": [...], "sql_executed": "SELECT ..."}
     失败时返回 {"error": str}，下游 Report Agent 可据此标注。
     """
+    if "sql" not in state.get("required_agent", ["sql", "rag"]):
+        return {"sql_result": [], "messages": []}
+
     llm = get_llm()
     schema = get_schema()
     llm_with_tool = llm.bind_tools([execute_query])

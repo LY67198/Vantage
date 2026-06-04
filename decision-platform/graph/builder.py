@@ -6,6 +6,7 @@ from graph.sql_agent import sql_agent_node
 from graph.rag_agent import rag_agent_node
 from graph.report_agent import report_agent_node
 from graph.orchestrator import orchestrator_node
+from langgraph.checkpoint.memory import MemorySaver
 
 from graph.state import AgentState
 
@@ -17,13 +18,12 @@ retry_policy = RetryPolicy(
 
 
 def dispatch_workers(state: AgentState) -> list[Send]:
-    """Phase 1 默认 SQL/RAG 全并行分发。
-
-    Phase 2 替换为条件路由：根据 orchestrator 输出动态决定启动哪些 Agent。
+    """根据 orchestrator 路由决策分发 Agent。
+    始终分发两个 Agent，不需要的 Agent 入口处 short-circuit。
     """
     return [
-        Send("sql_agent",state),
-        Send("rag_agent",state),
+        Send("sql_agent", state),
+        Send("rag_agent", state),
     ]
 
 def build_graph():
@@ -42,7 +42,8 @@ def build_graph():
     workflow.add_edge(["sql_agent","rag_agent"],"report_agent")
     workflow.add_edge("report_agent",END)
 
-    return workflow.compile()
+    checkpointer = MemorySaver()
+    return workflow.compile(checkpointer=checkpointer)
 
 
 

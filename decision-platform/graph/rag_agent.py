@@ -16,6 +16,9 @@ def rag_agent_node(state: AgentState) -> dict:
         [{"title": "...", "content": "...", "source": "...", "score": 0.92}, ...]
     无结果时返回 []，下游 Report Agent 可据此标注「未找到相关文档」。
     """
+    if "rag" not in state.get("required_agent", ["sql", "rag"]):
+        return {"rag_result": [], "messages": []}
+
     llm = get_llm()
     llm_with_tool = llm.bind_tools([search_docs])
     messages = [

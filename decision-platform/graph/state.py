@@ -9,3 +9,4 @@ class AgentState(TypedDict):
     sql_result: Annotated[list, operator.add]
     rag_result: Annotated[list, operator.add]
     report: str
+    required_agent:list
