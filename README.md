@@ -93,7 +93,7 @@ Vantage 将两条数据线统一接入多 Agent 系统，一个问题即可得�
 | 异步任务 | Celery | 导出任务异步执行 + 定时清理过期文件 |
 | API 服务 | FastAPI + SSE | RESTful API + 流式输出 + Swagger 自动文档 |
 | 鉴权 | JWT | 注册/登录/Token 刷新 + RBAC（admin/user） |
-| 前端 | Streamlit | 输入框 → 流式进度 → Markdown 报告渲染 |
+| 前端 | Vue 3 + Element Plus | 输入框 → 流式进度 → Markdown 报告渲染 |
 | 导出 | ReportLab + openpyxl | PDF + Excel 报告导出 |
 | 日志 | structlog | 结构化日志 + trace_id 链路追踪 |
 | 测试 | pytest | 单元测试 + 集成测试，核心路径覆盖 60%+ |
@@ -102,6 +102,18 @@ Vantage 将两条数据线统一接入多 Agent 系统，一个问题即可得�
 ---
 
 ## 项目结构
+
+```
+Vantage/
+├── decision-platform/    # FastAPI 后端
+├── frontend/             # Vue 3 + Element Plus 前端（独立项目）
+│   ├── src/views/        # Login.vue / Query.vue
+│   ├── src/components/   # QueryInput / AgentProgress / ReportView
+│   └── src/router/       # 路由 + JWT 守卫
+└── docs/superpowers/specs/
+```
+
+### 后端目录
 
 ```
 decision-platform/
@@ -216,7 +228,7 @@ docker compose exec app python scripts/init_chroma.py
 | 服务 | 地址 |
 |------|------|
 | API 文档 (Swagger) | http://localhost:8000/docs |
-| Streamlit 前端 | http://localhost:8501 |
+| Vue 3 前端 | http://localhost:5173 |
 | 健康检查 | http://localhost:8000/health |
 
 **6. 终端调试模式（保留）**
@@ -255,7 +267,7 @@ Phase 3  Redis 缓存 + 智能路由（Week 5–6）✅
          └─ 智能路由：LLM 条件路由 + Agent short-circuit + uuid 隔离
 
 Phase 4  工程化落地（Week 7–8）
-         ├─ Week 7：FastAPI + Swagger + JWT + SSE + Streamlit + PDF/Excel + Docker
+         ├─ Week 7：FastAPI + Swagger + JWT + Vue 3 + SSE + PDF/Excel + Docker
          └─ Week 8：Alembic + pytest + structlog + README + 部署上云
 ```
 
