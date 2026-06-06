@@ -85,13 +85,18 @@ Vantage 将两条数据线统一接入多 Agent 系统，一个问题即可得�
 |------|------|------|
 | Agent 框架 | LangGraph >= 1.2 | StateGraph + ReAct + Send API 并行 + RetryPolicy |
 | LLM | DeepSeek API | 兼容 OpenAI 协议，通过 ChatOpenAI 调用 |
-| 数据库 | PostgreSQL | 4 表：sales_records / customers / sales_reps / targets |
-| 向量检索 | ChromaDB | collection + embedding + query，语义检索 score > 0.7 过滤 |
-| Embedding | text-embedding-3-small / sentence-transformers | 优先开源模型节省 API 额度 |
-| 缓存 | Redis | 会话管理 + API 响应缓存 + 速率限制 |
-| API 服务 | FastAPI + SSE | 流式输出 Agent 执行过程 |
+| 数据库 | PostgreSQL | sales_records 等业务表 |
+| ORM | SQLAlchemy + Alembic | 模型定义 + 数据库迁移管理 |
+| 向量检索 | ChromaDB | 余弦距离语义检索 |
+| Embedding | DashScope text-embedding-v2 | 中文语义向量化 |
+| 缓存 | Redis | SQL 结果缓存 + RAG 查询缓存 |
+| API 服务 | FastAPI + SSE | RESTful API + 流式输出 + Swagger 自动文档 |
+| 鉴权 | JWT | 注册/登录/Token 刷新 + RBAC（admin/user） |
 | 前端 | Streamlit | 输入框 → 流式进度 → Markdown 报告渲染 |
-| 部署 | Docker Compose | 一键启动，支持云服务器（阿里云 / 腾讯云轻量级） |
+| 导出 | ReportLab + openpyxl | PDF + Excel 报告导出 |
+| 日志 | structlog | 结构化日志 + trace_id 链路追踪 |
+| 测试 | pytest | 单元测试 + 集成测试，核心路径覆盖 60%+ |
+| 部署 | Docker Compose | 开发/生产分离，一键启动 4 服务 |
 
 ---
 
@@ -99,60 +104,120 @@ Vantage 将两条数据线统一接入多 Agent 系统，一个问题即可得�
 
 ```
 decision-platform/
-├── mock_data/
-│   ├── __init__.py          # AVAILABLE_SCENARIOS 场景注册表
-│   ├── crm_sales.py         # SQL Agent Mock 数据源
-│   └── knowledge_base.py    # RAG Agent Mock 数据源
-├── graph/
-│   ├── state.py             # AgentState 定义
-│   ├── llm.py               # LLM 懒加载单例
-│   ├── orchestrator.py      # Orchestrator 节点
-│   ├── sql_agent.py         # SQL Agent — ReAct 循环
-│   ├── rag_agent.py         # RAG Agent — ReAct 循环
-│   ├── report_agent.py      # Report Agent — 纯格式化 + 降级模板
-│   └── builder.py           # LangGraph 图构建 + RetryPolicy
-├── tools/
-│   ├── sql_tools.py         # execute_query
-│   └── rag_tools.py         # search_docs
+├── api/                     # Phase 4 — FastAPI 层
+│   ├── app.py               # FastAPI 实例 + lifespan（启动/关闭）
+│   ├── middleware/
+│   │   ├── auth.py          # JWT 验证依赖（Depends）
+│   │   └── tracing.py       # trace_id 注入 + 请求日志
+│   ├── routes/
+│   │   ├── auth.py          # POST /auth/register, /auth/login, /auth/refresh
+│   │   ├── query.py         # POST /query (SSE), GET /history
+│   │   ├── export.py        # POST /export/pdf, POST /export/excel
+│   │   └── health.py        # GET /health
+│   └── schemas/             # Pydantic 请求/响应模型
+│       ├── auth.py
+│       ├── query.py
+│       └── export.py
+├── services/                # 业务逻辑层
+│   ├── auth_service.py      # 注册/登录/hash/token
+│   ├── query_service.py     # 调用 LangGraph graph.invoke/astream
+│   └── export_service.py    # PDF + Excel 生成
+├── models/                  # SQLAlchemy ORM
+│   ├── base.py              # DeclarativeBase
+│   ├── user.py
+│   └── query_log.py
+├── migrations/              # Alembic 数据库迁移
+├── graph/                   # ☑ 不动（4 个 Agent + builder + state）
+│   ├── state.py
+│   ├── llm.py
+│   ├── orchestrator.py
+│   ├── sql_agent.py
+│   ├── rag_agent.py
+│   ├── report_agent.py
+│   └── builder.py
+├── tools/                   # ☑ 不动（sql_tools + rag_tools）
+│   ├── sql_tools.py
+│   └── rag_tools.py
 ├── utils/
-│   └── logger.py            # log_agent_step 结构化终端输出
-├── main.py                  # 入口
+│   ├── logger.py
+│   ├── schema.py
+│   └── chroma_client.py
+├── tests/                   # pytest 单元测试 + 集成测试
+│   ├── unit/
+│   └── integration/
+├── main.py                  # ☑ 保留，终端交互入口
 ├── pyproject.toml
-└── .env
+├── .env.example             # 环境变量模板
+├── Dockerfile
+├── docker-compose.yml       # 开发环境
+├── docker-compose.prod.yml  # 生产环境
+└── alembic.ini
 ```
 
 ---
 
 ## 快速开始
 
-**环境要求：** Python 3.10+
+**环境要求：** Python 3.10+ / Docker Desktop
 
-**1. 安装依赖**
+**1. 克隆项目**
 
 ```bash
-cd decision-platform && uv sync
+git clone <repo-url> && cd Vantage/decision-platform
 ```
 
 **2. 配置环境变量**
 
-在 `decision-platform/` 目录下创建 `.env`：
-
-```
-API_KEY=your_deepseek_api_key
-BASE_URL=https://api.deepseek.com
-MODEL=deepseek-chat
+```bash
+cp .env.example .env
+# 编辑 .env，填入 API_KEY 等必要配置
 ```
 
-**3. 运行终端 Demo（Phase 1）**
+**.env 必要变量：**
+
+| 变量 | 说明 |
+|------|------|
+| `API_KEY` | DeepSeek API Key |
+| `BASE_URL` | API 地址（默认 https://api.deepseek.com） |
+| `MODEL` | 模型名（默认 deepseek-chat） |
+| `EMBEDDING_API_KEY` | DashScope API Key（阿里云） |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` | PostgreSQL 连接 |
+| `REDIS_HOST` / `REDIS_PORT` | Redis 连接 |
+| `JWT_SECRET` | JWT 签名密钥 |
+
+**3. 一键启动（Docker Compose）**
+
+```bash
+# 开发环境（热重载 + 源码挂载）
+docker compose up -d
+
+# 生产环境
+docker compose -f docker-compose.prod.yml up -d
+```
+
+**4. 初始化数据库**
+
+```bash
+# 运行数据库迁移
+docker compose exec app alembic upgrade head
+
+# 导入种子数据
+docker compose exec app python scripts/seed_data.py
+docker compose exec app python scripts/init_chroma.py
+```
+
+**5. 访问服务**
+
+| 服务 | 地址 |
+|------|------|
+| API 文档 (Swagger) | http://localhost:8000/docs |
+| Streamlit 前端 | http://localhost:8501 |
+| 健康检查 | http://localhost:8000/health |
+
+**6. 终端调试模式（保留）**
 
 ```bash
 uv run python main.py
-```
-
-**4. 启动完整服务（Phase 4）**
-
-```bash
-docker compose up -d
 ```
 
 ---
@@ -172,21 +237,21 @@ docker compose up -d
 ## 演进路线
 
 ```
-Phase 1  Mock 数据 + LangGraph 全链路跑通（终端 Demo，Week 1–2）
+Phase 1  Mock 数据 + LangGraph 全链路跑通（Week 1–2）✅
          ├─ Mock 数据层 + 工具层 + AgentState + 日志
          └─ SQL/RAG Agent ReAct 循环 + Graph 连线 + 端到端联调
 
-Phase 2  真实数据接入 + 向量检索（Week 3–4）
-         ├─ PostgreSQL：4 表 Schema + Text-to-SQL + 1000+ 条测试数据
-         └─ ChromaDB：真实 embedding 存入 + search_docs 升级 + score 阈值调优
+Phase 2  真实数据接入 + 向量检索（Week 3–4）✅
+         ├─ PostgreSQL：真实 DB 查询 + Schema 注入 + Text-to-SQL
+         └─ ChromaDB：向量检索 + DashScopeEmbeddings + score 阈值校准
 
-Phase 3  Redis 缓存 + 智能路由 + 会话管理（Week 5–6）
-         ├─ Redis 集成：基于真实数据做 SQL/RAG 工具缓存 + 会话上下文 + 速率限制
-         └─ 智能路由：add_conditional_edges 替换硬编码全并行，基于真实查询模式调优
+Phase 3  Redis 缓存 + 智能路由（Week 5–6）✅
+         ├─ Redis 集成：SQL/RAG 工具缓存 + 缓存 key 版本化
+         └─ 智能路由：LLM 条件路由 + Agent short-circuit + uuid 隔离
 
-Phase 4  部署 + 前端 + 生产化（Week 7–8）
-         ├─ FastAPI + SSE 流式 + Streamlit 前端 + 多用户会话隔离
-         └─ Docker Compose 云部署 + 权限系统 + Token 日志 + 链路追踪
+Phase 4  工程化落地（Week 7–8）
+         ├─ Week 7：FastAPI + Swagger + JWT + SSE + Streamlit + PDF/Excel + Docker
+         └─ Week 8：Alembic + pytest + structlog + README + 部署上云
 ```
 
 每个 Phase 工具层接口不变，Graph 层零改动。
