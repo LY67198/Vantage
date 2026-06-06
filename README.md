@@ -90,6 +90,7 @@ Vantage 将两条数据线统一接入多 Agent 系统，一个问题即可得�
 | 向量检索 | ChromaDB | 余弦距离语义检索 |
 | Embedding | DashScope text-embedding-v2 | 中文语义向量化 |
 | 缓存 | Redis | SQL 结果缓存 + RAG 查询缓存 |
+| 异步任务 | Celery | 导出任务异步执行 + 定时清理过期文件 |
 | API 服务 | FastAPI + SSE | RESTful API + 流式输出 + Swagger 自动文档 |
 | 鉴权 | JWT | 注册/登录/Token 刷新 + RBAC（admin/user） |
 | 前端 | Streamlit | 输入框 → 流式进度 → Markdown 报告渲染 |
@@ -118,10 +119,14 @@ decision-platform/
 │       ├── auth.py
 │       ├── query.py
 │       └── export.py
+├── tasks/                   # Celery 异步任务
+│   ├── celery_app.py        # Celery 实例 + Redis broker + beat schedule
+│   ├── export_tasks.py      # export_report_pdf / export_report_excel
+│   └── cleanup.py           # 定时清理 >24h 导出文件
 ├── services/                # 业务逻辑层
 │   ├── auth_service.py      # 注册/登录/hash/token
 │   ├── query_service.py     # 调用 LangGraph graph.invoke/astream
-│   └── export_service.py    # PDF + Excel 生成
+│   └── export_service.py    # PDF + Excel 生成（Celery 任务包装调用）
 ├── models/                  # SQLAlchemy ORM
 │   ├── base.py              # DeclarativeBase
 │   ├── user.py
@@ -288,4 +293,6 @@ langgraph >= 1.2
 langchain >= 1.3
 langchain-openai >= 1.2
 python-dotenv >= 1.0
+celery[redis] >= 5.4
+redis
 ```
