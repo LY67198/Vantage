@@ -105,15 +105,15 @@ Vantage 将两条数据线统一接入多 Agent 系统，一个问题即可得�
 
 ```
 Vantage/
-├── decision-platform/    # FastAPI 后端
-├── frontend/             # Vue 3 + Element Plus 前端（独立项目）
-│   ├── src/views/        # Login.vue / Query.vue
-│   ├── src/components/   # QueryInput / AgentProgress / ReportView
-│   └── src/router/       # 路由 + JWT 守卫
-└── docs/superpowers/specs/
+├── decision-platform/         # Python 后端
+├── frontend/                  # Vue 3 + Element Plus 前端
+│   ├── src/views/             # Login.vue / Query.vue
+│   ├── src/components/        # QueryInput / AgentProgress / ReportView
+│   └── src/router/            # 路由 + JWT 守卫
+└── docs/
 ```
 
-### 后端目录
+### 后端目录详情
 
 ```
 decision-platform/
