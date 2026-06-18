@@ -120,30 +120,11 @@ decision-platform/
 ├── api/                     # Phase 4 — FastAPI 层
 │   ├── app.py               # FastAPI 实例 + lifespan（启动/关闭）
 │   ├── middleware/
-│   │   ├── auth.py          # JWT 验证依赖（Depends）
-│   │   └── tracing.py       # trace_id 注入 + 请求日志
+│   │   └── __init__.py      # JWT（Day 32）+ tracing（Day 38）预留
 │   ├── routes/
-│   │   ├── auth.py          # POST /auth/register, /auth/login, /auth/refresh
-│   │   ├── query.py         # POST /query (SSE), GET /history
-│   │   ├── export.py        # POST /export/pdf, POST /export/excel
-│   │   └── health.py        # GET /health
-│   └── schemas/             # Pydantic 请求/响应模型
-│       ├── auth.py
-│       ├── query.py
-│       └── export.py
-├── tasks/                   # Celery 异步任务
-│   ├── celery_app.py        # Celery 实例 + Redis broker + beat schedule
-│   ├── export_tasks.py      # export_report_pdf / export_report_excel
-│   └── cleanup.py           # 定时清理 >24h 导出文件
-├── services/                # 业务逻辑层
-│   ├── auth_service.py      # 注册/登录/hash/token
-│   ├── query_service.py     # 调用 LangGraph graph.invoke/astream
-│   └── export_service.py    # PDF + Excel 生成（Celery 任务包装调用）
-├── models/                  # SQLAlchemy ORM
-│   ├── base.py              # DeclarativeBase
-│   ├── user.py
-│   └── query_log.py
-├── migrations/              # Alembic 数据库迁移
+│   │   └── query.py         # POST /query (SSE 流式), GET /health ✅
+│   └── schemas/
+│       └── query.py         # QueryRequest ✅
 ├── graph/                   # ☑ 不动（4 个 Agent + builder + state）
 │   ├── state.py
 │   ├── llm.py
@@ -156,19 +137,30 @@ decision-platform/
 │   ├── sql_tools.py
 │   └── rag_tools.py
 ├── utils/
-│   ├── logger.py
+│   ├── logger.py            # 终端彩色日志 + SSE 事件推送 ✅
 │   ├── schema.py
 │   └── chroma_client.py
-├── tests/                   # pytest 单元测试 + 集成测试
-│   ├── unit/
-│   └── integration/
 ├── main.py                  # ☑ 保留，终端交互入口
 ├── pyproject.toml
-├── .env.example             # 环境变量模板
-├── Dockerfile
-├── docker-compose.yml       # 开发环境
-├── docker-compose.prod.yml  # 生产环境
-└── alembic.ini
+└── .env.example             # Day 39 创建
+```
+
+**📋 后续 Days 新增（按计划）：**
+
+```
+api/
+├── middleware/auth.py       # Day 32 — JWT 验证依赖
+├── routes/
+│   ├── auth.py              # Day 32 — 注册/登录/刷新
+│   └── export.py            # Day 34 — 导出 + 下载
+└── schemas/
+    ├── auth.py              # Day 32
+    └── export.py            # Day 34
+tasks/                       # Day 34 — Celery 异步导出
+services/                    # Day 32 — 业务逻辑层
+models/                      # Day 32 — SQLAlchemy ORM
+migrations/                  # Day 36 — Alembic
+tests/                       # Day 37 — pytest
 ```
 
 ---
@@ -231,7 +223,16 @@ docker compose exec app python scripts/init_chroma.py
 | Vue 3 前端 | http://localhost:5173 |
 | 健康检查 | http://localhost:8000/health |
 
-**6. 终端调试模式（保留）**
+**6. 测试 SSE 流式查询**
+
+```bash
+curl -N -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"question":"华东区Q2各城市营收是多少？"}'
+# 预期：逐步推送 agent_step 事件（ORC → SQL → RAG → RPT）→ done
+```
+
+**7. 终端调试模式（保留）**
 
 ```bash
 uv run python main.py
@@ -267,7 +268,7 @@ Phase 3  Redis 缓存 + 智能路由（Week 5–6）✅
          └─ 智能路由：LLM 条件路由 + Agent short-circuit + uuid 隔离
 
 Phase 4  工程化落地（Week 7–8）
-         ├─ Week 7：FastAPI + Swagger + JWT + Vue 3 + SSE + PDF/Excel + Docker
+         ├─ Week 7：FastAPI + Swagger ✅ + SSE 流式 ✅ + JWT + Vue 3 + PDF/Excel + Docker
          └─ Week 8：Alembic + pytest + structlog + README + 部署上云
 ```
 

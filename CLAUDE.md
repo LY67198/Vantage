@@ -9,43 +9,127 @@ Vantage（企业智能决策中台），基于 LangGraph 多 Agent 协作。用�
 | 业务场景 | 销售业绩分析（如「Q2 华东区业绩为什么下滑？」） |
 | Agent 框架 | LangGraph — Orchestrator + Send API 并行分发 |
 | LLM | DeepSeek API（兼容 OpenAI 协议，ChatOpenAI 调用） |
-| 数据策略 | Phase 1 Mock → Phase 2 真实 DB → Phase 3 向量库 + 缓存 |
+| 数据策略 | Phase 1 Mock → Phase 2 真实 DB → Phase 3 向量库 + 缓存 → Phase 4 工程化 |
 | 开发周期 | 8 周 / 40 天 |
 
 ## 当前阶段
 
-**Phase 2**（Week 3–4）：PostgreSQL + ChromaDB 真实数据接入。Phase 1 已完成。
+**Phase 4**（Week 7–8）：工程化落地 — FastAPI + JWT + SSE + Celery 异步导出 + Docker Compose + pytest + structlog。Phase 1/2/3 已完成。
 
-### Phase 1（已完成 ✅）
+### Phase 1-3 状态（已完成 ✅）
 
-| 模块 | 文件 | 状态 |
+Phase 1-3 全部完成，详见 `decision-platform-plan.md`。核心产出：
+- LangGraph 多 Agent 全链路（Orchestrator → SQL/RAG 并行 → Report）
+- PostgreSQL + ChromaDB 真实数据接入
+- Redis 缓存 + 智能路由（`required_agent` short-circuit）
+- 30 个踩坑记录写入 CLAUDE.md
+
+### Day 31 FastAPI + Swagger（已完成 ✅）
+
+**状态：** 代码已提交推送，commit `66a72dd`（10 files, +325 lines）。
+
+### Day 33 SSE 流式输出（已完成 ✅）
+
+**状态：** 代码已提交，commits `00baedd` / `a7bc3b8` / `34a47f6`（3 files）。
+
+**改动范围：**
+
+| 文件 | 操作 | 说明 |
 |------|------|------|
-| AgentState | `graph/state.py` | ✅ |
-| LLM 配置 | `graph/llm.py` | ✅ 懒加载单例，`get_llm()` 首次调用时创建，import 不依赖 .env |
-| Mock 数据层 | `mock_data/` | ✅ CRM + 知识库 + 场景注册 + 校验 |
-| 工具层 | `tools/sql_tools.py` `tools/rag_tools.py` | ✅ `@tool` 装饰，Phase 演进接口不变 |
-| 日志 | `utils/logger.py` | ✅ 终端彩色日志，预留 SSE 复用 |
-| Orchestrator | `graph/orchestrator.py` | ✅ LLM 分析问题、识别实体、拆解子任务 |
-| SQL Agent | `graph/sql_agent.py` | ✅ 手写 ReAct 循环，7 个单元测试通过 |
-| RAG Agent | `graph/rag_agent.py` | ✅ 手写 ReAct 循环，8 个单元测试通过 |
-| Report Agent | `graph/report_agent.py` | ✅ 融合 + 降级模板 |
-| Graph 构建 | `graph/builder.py` | ✅ StateGraph + Send API 并行 + RetryPolicy + join |
-| 入口联调 | `main.py` | ✅ 全链路跑通（Orchestrator → SQL/RAG 并行 → Report） |
+| `utils/logger.py` | 修改 (+27) | + `contextvars`（`_sse_queue` / `_sse_loop` / `_trace_id`）+ `set_sse_context()` + `log_agent_step` 末尾 SSE 推送（`call_soon_threadsafe`） |
+| `api/schemas/query.py` | 修改 (-13) | 删 `QueryResponse`，只保留 `QueryRequest` |
+| `api/routes/query.py` | 重写 (+102/-45) | 同步 `ainvoke` → SSE 流式：`asyncio.to_thread(graph.invoke)` + `asyncio.Queue` + `event_stream` + `StreamingResponse` |
+| `graph/` | **零改动** | — |
+| `tools/` | **零改动** | — |
+| `main.py` | **零改动** | 终端入口不受影响（ContextVar 默认 None → 跳过 SSE 推送） |
 
-### Phase 2 进度（Week 3：PostgreSQL 接入）
+**架构要点：**
+- `log_agent_step` 末尾加 try/except 保护的 SSE 推送（best-effort，不阻塞主链路）
+- `event_stream` 三个退出路径：RPT 完成 / task 完成+queue 清空 / task 崩溃
+- `asyncio.wait_for(graph_task, timeout=300)` 防 graph 挂死
+- 主退出路径检查 `graph_task.exception()` 防静默吞错
+- SSE 事件格式：`event: agent_step\ndata: {"agent":"SQL","status":"...","content":"...","trace_id":"..."}\n\n`
 
-| 任务 | 状态 | 说明 |
-|------|------|------|
-| PostgreSQL 环境搭建 | ✅ | Windows 本地 PostgreSQL 16，`vantage` 数据库，`sales_records` 表 |
-| 测试数据导入 | ✅ | `scripts/seed_data.py`，华东/华南/华北/华中 2024-2025 数据 |
-| `psycopg2-binary` 依赖 | ✅ | 已加入 `pyproject.toml`，连接通道打通 |
-| `execute_query` 工具升级 | ✅ | Mock → 真实 DB 查询 |
-| Schema 管理 | ✅ | 自动注入表结构到 LLM prompt |
-| SQL Agent 联调 | ✅ | 验证复杂查询正确率 |
-| ChromaDB 环境搭建 | ✅ | Week 4 — PersistentClient + DashScopeEmbeddings，余弦距离 |
-| `search_docs` 工具升级 | ✅ | Mock → ChromaDB 向量检索，score = 1 - cosine_distance |
-| RAG Agent 联调 | ✅ | Week 4 — LLM 生成检索词，命中结果 0.838 相似度 |
-| 端到端联调 | ✅ | Week 4 — tests/test_e2e.py，三 Agent 协同通过 |
+### ⏭ 当前任务：Day 32 JWT 鉴权 + Vue 脚手架
+
+**当前 API 文件状态：**
+
+| 文件 | 内容 |
+|------|------|
+| `api/__init__.py` | 包说明 |
+| `api/app.py` | `create_app()` 工厂 + `CORSMiddleware` + lifespan；预留 Day 32/34 路由注册注释 |
+| `api/routes/__init__.py` | 路由规划说明 |
+| `api/routes/query.py` | `POST /query` SSE 流式 + `GET /health` |
+| `api/schemas/__init__.py` | Schema 规划说明 |
+| `api/schemas/query.py` | `QueryRequest`（question 1-2000 字符） |
+| `api/middleware/__init__.py` | Day 32/38 预留说明 |
+
+**启动命令：** `cd decision-platform && uv run uvicorn api.app:app --reload`
+**Swagger：** `http://127.0.0.1:8000/docs`
+
+**核心约束：**
+- `graph/`、`tools/`、`main.py` — **零改动**
+- LLM 用 `from graph.llm import get_llm` 懒加载，不要模块级 import
+
+### 项目目录 vs 计划对照
+
+**已存在 ✅（Phase 1-3 代码 + Day 31 新建）：**
+```
+graph/       ✅ 8 files   （Agent 层，Phase 4 不动）
+tools/       ✅ 3 files   （sql_tools + rag_tools）
+utils/       ✅ 4 files   （logger + schema + chroma_client）
+main.py      ✅           （终端入口，保留）
+mock_data/   ✅ 3 files   （Phase 1 Mock，保留供参考）
+scripts/     ✅ 6 files   （seed_data + init_chroma + test_redis* + start_services）
+api/         ✅ 7 files   （Day 31 新建，基础结构就位）
+```
+
+**按计划缺失 ❌（后续 Days 创建）：**
+
+| 缺失目录/文件 | 所属 Day | 说明 |
+|---------------|----------|------|
+| `../frontend/` | Day 32 | Vue 3 + Element Plus 前端（与 decision-platform 平级） |
+| `services/` | Day 32 | auth_service + query_service + export_service |
+| `models/` | Day 32 | User + QueryLog ORM + DeclarativeBase |
+| `api/routes/auth.py` | Day 32 | 注册/登录/刷新端点 |
+| `api/middleware/auth.py` | Day 32 | JWT Depends(get_current_user) |
+| `api/routes/export.py` | Day 34 | 导出 + 下载端点 |
+| `api/schemas/auth.py` | Day 32 | 认证 Pydantic 模型 |
+| `api/schemas/export.py` | Day 34 | 导出 Pydantic 模型 |
+| `tasks/` | Day 34 | celery_app + export_tasks + cleanup |
+| `exports/` | Day 34 | 导出文件目录 |
+| `Dockerfile` | Day 35 | 镜像构建 |
+| `docker-compose.yml` | Day 35 | 6 服务编排 |
+| `docker-compose.prod.yml` | Day 35 | 生产配置 |
+| `alembic.ini` + `migrations/` | Day 36 | 数据库迁移 |
+| `.env.example` | Day 39 | 环境变量模板 |
+
+**依赖链（按顺序学）：**
+```
+Day 31 FastAPI ✅ → Day 32 JWT + Vue 脚手架 → Day 33 SSE ✅ → Day 33b Vue 前端
+                                                   ↘ Day 34 Celery 导出
+                                      Day 35 Docker Compose
+                                      Day 36 Alembic → Day 37 pytest → Day 38 structlog
+                                      Day 39 README → Day 40 上云
+```
+
+**学习策略：** 每个技术现学现用。做完每天把经验写入 `decision-platform-plan.md` 对应 Phase 4 复盘区块。
+
+### Phase 4 进度（Week 7–8：工程化落地）
+
+| 天 | 任务 | 状态 |
+|----|------|------|
+| Day 31 | FastAPI + Swagger | ✅ 已提交 |
+| Day 32 | JWT 鉴权（注册/登录/Token + RBAC） | 🔄 |
+| Day 33 | SSE 流式 | ✅ 已提交 |
+| Day 33b | Vue 3 前端 | ⏳ |
+| Day 34 | PDF/Excel 导出（Celery 异步） | ⏳ |
+| Day 35 | Docker Compose（6 服务含 Worker + Beat） | ⏳ |
+| Day 36 | Alembic 数据库迁移 | ⏳ |
+| Day 37 | pytest 测试（含 Celery 导出 + cleanup + API） | ⏳ |
+| Day 38 | structlog 结构化日志 + trace_id | ⏳ |
+| Day 39 | README + .env.example | ⏳ |
+| Day 40 | 上云部署 | ⏳ |
 
 ### PostgreSQL 环境备忘
 
@@ -81,6 +165,7 @@ psql -U postgres -d vantage
 | Report 触发 | LangGraph join 语义 | 两路到齐自动执行，零额外代码 |
 | State 合并 | `operator.add` reducer | 防止并行写入时字段覆盖 |
 | 路由扩展 | Orchestrator 输出边预留 | Phase 2 两行代码升级智能路由 |
+| Celery 异步导出 | `POST /export/pdf` → task_id → 轮询 → 下载 | 导出不阻塞 API；复用 Redis（broker db 1 + result backend db 2） |
 
 ## Agent 实现方式
 
@@ -256,8 +341,9 @@ workflow.add_conditional_edges("orchestrator", route)
 | 数据库 | Mock | PostgreSQL (4表) | PostgreSQL | PostgreSQL |
 | 向量检索 | Mock | ChromaDB | ChromaDB | ChromaDB |
 | 缓存 | — | — | Redis (会话+响应缓存+速率限制) | Redis |
+| 异步任务 | — | — | — | Celery (导出 + 定时清理) |
 | API | — | — | — | FastAPI + SSE 流式 |
-| 前端 | 终端日志 | 终端日志 | 终端日志 | Streamlit |
+| 前端 | 终端日志 | 终端日志 | 终端日志 | Vue 3 + Element Plus |
 | 部署 | 本地 | 本地 | 本地 | Docker Compose + 云服务器 |
 
 ## 依赖（UV 管理）
@@ -283,18 +369,121 @@ workflow.add_conditional_edges("orchestrator", route)
 - 添加依赖：`cd decision-platform && uv add <package>`
 
 ```toml
-# Phase 1-2（当前）
+# 当前依赖（Phase 4）
 dependencies = [
     "langgraph>=1.2",
     "langchain>=1.3",
     "langchain-openai>=1.2",
+    "langchain-community>=0.4",
     "python-dotenv>=1.0",
     "psycopg2-binary>=2.9.12",
+    "redis>=5.0",
+    "chromadb>=0.5",
+    "celery[redis]>=5.4",
+    "fastapi>=0.136.3",
+    "uvicorn>=0.48.0",
 ]
 
-# Phase 3-4（后续添加）
-# "redis", "chromadb", "sentence-transformers", "fastapi", "uvicorn", "streamlit"
+# Phase 4 后续添加
+# "sqlalchemy", "alembic", "python-jose", "bcrypt",
+# "structlog", "reportlab", "openpyxl"
 ```
+
+## Phase 4 Celery 异步导出架构
+
+### 概览
+
+Celery 只负责 PDF/Excel 导出，不碰 `/query` 主链路（保持 SSE 流式）。导出流程：
+
+```
+POST /export/pdf  →  Redis (broker, db 1)  →  Celery Worker  →  exports/report_xxx.pdf
+        ↓                                    ↑
+  返回 task_id                           Celery Beat
+        ↓                              (每 6h 清理 >24h 文件)
+GET /export/{task_id}
+   → {"status": "PENDING/SUCCESS/FAILURE", "download_url": "..."}
+GET /export/download/{filename}
+   → FileResponse
+```
+
+### Redis DB 分配
+
+| DB | 用途 | 说明 |
+|----|------|------|
+| db 0 | 缓存（SQL + RAG） | Phase 3 已有 |
+| db 1 | Celery broker | 任务队列 |
+| db 2 | Celery result backend | 任务状态 + 结果路径，1h 过期 |
+
+### Celery 配置要点
+
+```python
+# tasks/celery_app.py
+app = Celery("vantage")
+app.conf.update(
+    broker_url="redis://localhost:6379/1",
+    result_backend="redis://localhost:6379/2",
+    task_serializer="json",
+    result_expires=3600,          # 结果 1h 过期
+    task_soft_time_limit=58,      # 软超时 58s
+    task_time_limit=60,           # 硬超时 60s
+    worker_concurrency=2,
+    timezone="Asia/Shanghai",
+)
+
+# Beat 定时清理
+app.conf.beat_schedule = {
+    "cleanup-exports": {
+        "task": "tasks.cleanup.cleanup_expired_exports",
+        "schedule": crontab(minute=57, hour="*/6"),  # 每 6h，避开整点
+    },
+}
+```
+
+### 任务定义
+
+- `tasks/export_tasks.py`：`export_report_pdf` / `export_report_excel`，接收 report 文本 + 可选的 sql_result/rag_result（不传复杂对象，Celery JSON 序列化约束）
+- `max_retries=2`，间隔 5s，仅针对瞬时性异常（磁盘满、临时 IO）
+- 文件名格式：`report_{user_id}_{timestamp}_{task_id前8位}.pdf`
+- `tasks/cleanup.py`：`cleanup_expired_exports`，删除 `exports/` 中 mtime > 24h 的文件
+
+### API 端点
+
+| 端点 | 方法 | 鉴权 | 说明 |
+|------|------|------|------|
+| `/export/pdf` | POST | Bearer token | `task.delay(...)` → 返回 `{"task_id": str, "status": "PENDING"}` |
+| `/export/excel` | POST | Bearer token | 同上 |
+| `/export/{task_id}` | GET | Bearer token | `AsyncResult(task_id)` → PENDING/SUCCESS/FAILURE |
+| `/export/download/{filename}` | GET | Bearer token | `FileResponse`，404 表示文件已过期 |
+
+### Docker 服务拓扑（Day 35）
+
+```
+app (FastAPI, port 8000)
+  ├── postgres (PostgreSQL 16, port 5432)
+  ├── redis (Redis 7, port 6379)
+  ├── chromadb (ChromaDB, port 8000)
+  ├── worker (Celery worker, 无端口, concurrency=2)
+  └── celery-beat (Celery beat, 无端口, 不可 scale)
+```
+
+- `worker`、`celery-beat`、`app` 共用同一个 Dockerfile，仅 `command` 不同
+- `exports_data` volume 被 `app` 和 `worker` 共享（worker 写入，app 读取）
+- `celery-beat` 不可 scale（crontab 重复执行会导致清理冲突）
+
+### 错误处理
+
+| 场景 | 响应 |
+|------|------|
+| Celery broker 不可达 | `503 {"error": "导出服务暂时不可用"}` |
+| 任务超时（60s） | SIGKILL → FAILURE |
+| Worker 崩溃 | 下次 poll → FAILURE |
+| 结果过期（>1h） | AsyncResult → PENDING → 前端提示"任务已过期" |
+| 磁盘满 | 重试 2 次 → FAILURE |
+| 文件已清理 | 404 |
+
+### 对 graph/ 和 tools/ 的影响
+
+**零改动。** Celery 完全在 API 层和 tasks/ 层实现，`graph/` 和 `tools/` 不感知 Celery。
 
 ## 代码约定
 
@@ -720,6 +909,63 @@ if score >= 0.2:  # text-embedding-v2 中文相似度实际在 0.05~0.45
 
 **原因：** DashScope `text-embedding-v2` 对中文文档的 cosine similarity 集中在 0.05~0.45 区间，远低于"语义相似≈0.7+"的理论预期。设置阈值前必须先 `print` 原始 distances 观察实际分布，否则阈值要么全过滤要么全放行。不同 embedding model 的分数分布差异很大，换模型后要重新校准。
 
+### 31. SSE 推送必须 try/except 保护，不能阻塞主查询链路
+
+```python
+# ❌ SSE 推送异常直接传播 → Agent ReAct 循环中断 → 整个 /query 500
+q = _sse_queue.get()
+loop = _sse_loop.get()
+if q is not None and loop is not None:
+    loop.call_soon_threadsafe(q.put_nowait, {...})  # RuntimeError/QueueFull → 崩溃
+
+# ✅ try/except 包裹，SSE 是 best-effort 旁路
+try:
+    q = _sse_queue.get()
+    loop = _sse_loop.get()
+    if q is not None and loop is not None:
+        loop.call_soon_threadsafe(q.put_nowait, {...})
+except Exception:
+    pass  # SSE 推送失败不阻塞主查询
+```
+
+**原因：** `call_soon_threadsafe` 在 event loop 关闭时会抛 `RuntimeError`，`put_nowait` 在 queue 有界且满时会抛 `QueueFull`。`log_agent_step` 从 Agent ReAct 循环深处调用，未捕获异常直接传播到 graph 节点 → LangGraph 收到异常 → 整个查询失败。SSE 是 observability 旁路，永远不能影响主链路。
+
+### 32. `event_stream` 主退出路径必须检查 `graph_task.exception()`
+
+```python
+# ❌ graph 崩溃但 event_stream 在 TimeoutError 才查异常 → 时序竞争，错误可能被静默吞掉
+if graph_task.done() and queue.empty():
+    break  # ← 没查 exception()，graph 崩溃被当作正常完成
+
+# ✅ 主退出路径也检查异常
+if graph_task.done() and queue.empty():
+    exc = graph_task.exception()
+    if exc:
+        yield format_sse("error", {"msg": str(exc)})
+    break
+```
+
+**原因：** 代码审查发现的时序竞争 bug。graph 在事件推送间隔内崩溃时，`event_stream` 的 `TimeoutError` 分支可能还没触发（`queue.get()` 正在等待中），而主退出条件的 `graph_task.done()` 先命中 → 不查 exception 直接 break → yield "done" → 客户端看到成功。同一个崩溃在不同时序下有时报错有时不报，排查困难。
+
+### 33. `asyncio.to_thread` 跑同步 graph 必须有超时
+
+```python
+# ❌ graph.invoke 挂死（LLM 超时未 catch、ReAct 死循环）→ SSE 连接永远不关 → 线程泄漏
+graph_task = asyncio.create_task(
+    asyncio.to_thread(lambda: graph.invoke(initial_state, config=config))
+)
+
+# ✅ 外层包 asyncio.wait_for，300s 兜底
+graph_task = asyncio.create_task(
+    asyncio.wait_for(
+        asyncio.to_thread(lambda: graph.invoke(initial_state, config=config)),
+        timeout=300.0,
+    )
+)
+```
+
+**原因：** LangGraph 的 RetryPolicy 不会覆盖所有异常路径（如 LLM 库内部 hang、网络层无超时），线程池线程一旦挂死永不回收。`asyncio.wait_for` 在超时后 cancel 内层 task，event_stream 的 `CancelledError` 分支 yield error event → 连接正常关闭。
+
 ### 30. MemorySaver + 固定 thread_id → 跨查询状态泄漏
 
 ```python
@@ -760,8 +1006,9 @@ while True:
 ## 约束
 
 - DeepSeek 配置通过 `API_KEY` / `BASE_URL` / `MODEL` 环境变量，不硬编码
-- Phase 1 全 Mock，不连外部 API（仅 LLM 调用 DeepSeek）✅ 已完成
-- Phase 2 接入真实 PostgreSQL（`psycopg2-binary`），本地 `trust` 认证免密码
-- 新增业务场景只需在 `mock_data/` 加数据文件，Agent 代码零改动（Phase 1）；Phase 2 起改走 PostgreSQL + ChromaDB
+- Phase 1 全 Mock ✅ 已完成 → Phase 2 真实 PostgreSQL + ChromaDB ✅ 已完成 → Phase 3 Redis + 智能路由 ✅ 已完成
+- Phase 4 工程化落地进行中：FastAPI + JWT + Vue 3 + Celery 异步导出 + Docker Compose
+- **Celery 只做导出，不碰 /query 主链路**（保持 SSE 流式）。graph/ 和 tools/ 零改动
+- 新增业务场景直接在 PostgreSQL + ChromaDB 上加数据，Agent 代码零改动
 - `log_agent_step` 函数签名为 Phase 2 SSE event 预留，Phase 演进时签名不变
 - 上下文文档：设计文档（`2026-05-26-decision-platform-design.md`）和计划文档（`decision-platform-plan.md`）均在项目根目录，仅本地不入 git
