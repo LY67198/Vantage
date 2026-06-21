@@ -1,7 +1,7 @@
 """FastAPI 应用实例 — 工厂函数 + lifespan。
 
 Phase 4 Day 31 基础版：注册 query_router，无鉴权中间件。
-Day 32 加入 auth_router + JWT middleware。
+Day 32 加入 auth_router + JWT middleware + DB 建表。
 Day 34 加入 export_router。
 """
 
@@ -16,15 +16,23 @@ from utils.logger import log_agent_step
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """应用生命周期：启动时检查外部服务，关闭时清理资源。
+    """应用生命周期：启动时建表，关闭时释放 DB 连接池。
 
-    Day 31（当前）：仅打日志。
-    Day 32 加入：DB 连接池初始化。
-    Day 35 加入：Redis / ChromaDB 连接检查。
+    Day 32：Base.metadata.create_all 手动建 users 表。
+            Day 36 引入 Alembic 后改为基线迁移。
+    Day 35：检查 Redis / ChromaDB 连接状态。
     """
     log_agent_step("API", "启动", "Vantage API 启动中...")
-    # TODO Day 35：检查 PostgreSQL / Redis / ChromaDB 连接状态
+
+    # Day 32: 初始化 DB 引擎 + 建表（Alembic 到 Day 36 接管）
+    from models import engine, Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    log_agent_step("API", "DB", "数据库表初始化完成")
+
     yield
+
+    await engine.dispose()
     log_agent_step("API", "关闭", "Vantage API 已停止。")
 
 
@@ -54,9 +62,9 @@ def create_app() -> FastAPI:
     from api.routes.query import router as query_router
     app.include_router(query_router)
 
-    # Day 32 注册：
-    # from api.routes.auth import router as auth_router
-    # app.include_router(auth_router, prefix="/auth")
+    # Day 32: 认证路由
+    from api.routes.auth import router as auth_router
+    app.include_router(auth_router)
 
     # Day 34 注册：
     # from api.routes.export import router as export_router
