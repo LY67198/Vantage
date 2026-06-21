@@ -52,7 +52,7 @@ Phase 1-3 全部完成，详见 `decision-platform-plan.md`。核心产出：
 
 ### Day 32 JWT 鉴权（已完成 ✅）
 
-**状态：** 代码已提交推送，commits `7ba309e` ~ `6d16a35`（7 files, +330 lines）。设计文档：`docs/superpowers/specs/2026-06-18-jwt-auth-design.md`，实施计划：`docs/superpowers/plans/2026-06-18-jwt-auth-implementation.md`。
+**状态：** 代码已提交推送，commits `7ba309e` ~ `6d16a35`（7 files, +330 lines）。设计文档和实施计划已归档删除，关键信息整合进本文档。
 
 **改动范围：**
 
