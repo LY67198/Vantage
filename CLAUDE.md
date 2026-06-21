@@ -50,19 +50,50 @@ Phase 1-3 全部完成，详见 `decision-platform-plan.md`。核心产出：
 - 主退出路径检查 `graph_task.exception()` 防静默吞错
 - SSE 事件格式：`event: agent_step\ndata: {"agent":"SQL","status":"...","content":"...","trace_id":"..."}\n\n`
 
-### ⏭ 当前任务：Day 32 JWT 鉴权 + Vue 脚手架
+### Day 32 JWT 鉴权（已完成 ✅）
+
+**状态：** 代码已提交推送，commits `7ba309e` ~ `6d16a35`（7 files, +330 lines）。设计文档：`docs/superpowers/specs/2026-06-18-jwt-auth-design.md`，实施计划：`docs/superpowers/plans/2026-06-18-jwt-auth-implementation.md`。
+
+**改动范围：**
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `pyproject.toml` | 修改 (+4 deps) | + `sqlalchemy[asyncio]`, `asyncpg`, `python-jose[cryptography]`, `bcrypt` |
+| `models/__init__.py` | 新建 | `DeclarativeBase` + async engine + `async_sessionmaker` + `get_db` 依赖 |
+| `models/user.py` | 新建 | `User` ORM 模型（id/username/password_hash/email/role/created_at） |
+| `services/__init__.py` | 新建 | 业务逻辑层包标记 |
+| `services/auth_service.py` | 新建 | `hash_password`/`verify_password`（bcrypt）+ `create_access_token`/`create_refresh_token`/`decode_token`（JWT HS256）+ `get_user_by_username`/`create_user`（SQLAlchemy async） |
+| `api/schemas/auth.py` | 新建 | `RegisterRequest`, `LoginRequest`, `RefreshRequest`, `TokenResponse`, `UserResponse` |
+| `api/middleware/auth.py` | 新建 | `get_current_user` 依赖（`HTTPBearer` → decode → 查 DB → 返回 `{id, username, role}`） |
+| `api/routes/auth.py` | 新建 | `POST /auth/register`, `/auth/login`, `/auth/refresh`（3 个端点） |
+| `api/app.py` | 修改 (+8/-9) | lifespan 中 `Base.metadata.create_all` 建表、注册 `auth_router`、关闭时 `engine.dispose()` |
+| `graph/` | **零改动** | — |
+| `tools/` | **零改动** | — |
+| `main.py` | **零改动** | — |
+
+**架构要点：**
+- JWT HS256，Access Token 15min / Refresh Token 7d，payload: `{sub, role, type, exp}`
+- 密码 bcrypt 加盐哈希，`create_user` 在服务层哈希
+- `get_current_user` 返回 dict（`{id, username, role}`），RBAC 预留 `role` 字段
+- `/query` 端点暂不加鉴权（middleware 完成后一行 `Depends(get_current_user)` 即可接入）
+- `users` 表在 lifespan 中 `Base.metadata.create_all()` 建，Day 36 Alembic 做基线迁移
+
+**JWT 建表 & Alembic 风险点：** `users` 表先用 `Base.metadata.create_all()` 建。等 Day 36 做 Alembic 时需要基线迁移：`alembic revision --autogenerate -m "baseline"` + `alembic stamp head`，把已存在的表纳入迁移管理。
+
+### ⏭ 当前任务：Day 33b Vue 3 前端脚手架
 
 **当前 API 文件状态：**
 
 | 文件 | 内容 |
 |------|------|
-| `api/__init__.py` | 包说明 |
-| `api/app.py` | `create_app()` 工厂 + `CORSMiddleware` + lifespan；预留 Day 32/34 路由注册注释 |
-| `api/routes/__init__.py` | 路由规划说明 |
+| `api/app.py` | `create_app()` 工厂 + CORSMiddleware + lifespan（DB 建表 + auth 路由） |
 | `api/routes/query.py` | `POST /query` SSE 流式 + `GET /health` |
-| `api/schemas/__init__.py` | Schema 规划说明 |
+| `api/routes/auth.py` | `POST /auth/register`, `/auth/login`, `/auth/refresh` |
 | `api/schemas/query.py` | `QueryRequest`（question 1-2000 字符） |
-| `api/middleware/__init__.py` | Day 32/38 预留说明 |
+| `api/schemas/auth.py` | `RegisterRequest`, `LoginRequest`, `RefreshRequest`, `TokenResponse`, `UserResponse` |
+| `api/middleware/auth.py` | `get_current_user` 依赖（HTTPBearer → JWT → DB lookup） |
+| `models/` | `Base` + `engine` + `async_session` + `get_db` + `User` ORM |
+| `services/auth_service.py` | bcrypt 密码哈希 + JWT 编解码 + 用户 CRUD |
 
 **启动命令：** `cd decision-platform && uv run uvicorn api.app:app --reload`
 **Swagger：** `http://127.0.0.1:8000/docs`
@@ -81,20 +112,17 @@ utils/       ✅ 4 files   （logger + schema + chroma_client）
 main.py      ✅           （终端入口，保留）
 mock_data/   ✅ 3 files   （Phase 1 Mock，保留供参考）
 scripts/     ✅ 6 files   （seed_data + init_chroma + test_redis* + start_services）
-api/         ✅ 7 files   （Day 31 新建，基础结构就位）
+api/         ✅ 11 files  （Day 31 基础 + Day 32 auth + Day 33 SSE）
+models/      ✅ 2 files   （Day 32：DeclarativeBase + User ORM）
+services/    ✅ 2 files   （Day 32：auth_service）
 ```
 
 **按计划缺失 ❌（后续 Days 创建）：**
 
 | 缺失目录/文件 | 所属 Day | 说明 |
 |---------------|----------|------|
-| `../frontend/` | Day 32 | Vue 3 + Element Plus 前端（与 decision-platform 平级） |
-| `services/` | Day 32 | auth_service + query_service + export_service |
-| `models/` | Day 32 | User + QueryLog ORM + DeclarativeBase |
-| `api/routes/auth.py` | Day 32 | 注册/登录/刷新端点 |
-| `api/middleware/auth.py` | Day 32 | JWT Depends(get_current_user) |
+| `../frontend/` | Day 33b | Vue 3 + Element Plus 前端（与 decision-platform 平级） |
 | `api/routes/export.py` | Day 34 | 导出 + 下载端点 |
-| `api/schemas/auth.py` | Day 32 | 认证 Pydantic 模型 |
 | `api/schemas/export.py` | Day 34 | 导出 Pydantic 模型 |
 | `tasks/` | Day 34 | celery_app + export_tasks + cleanup |
 | `exports/` | Day 34 | 导出文件目录 |
@@ -106,12 +134,15 @@ api/         ✅ 7 files   （Day 31 新建，基础结构就位）
 
 **依赖链（按顺序学）：**
 ```
-Day 31 FastAPI ✅ → Day 32 JWT + Vue 脚手架 → Day 33 SSE ✅ → Day 33b Vue 前端
-                                                   ↘ Day 34 Celery 导出
-                                      Day 35 Docker Compose
-                                      Day 36 Alembic → Day 37 pytest → Day 38 structlog
-                                      Day 39 README → Day 40 上云
+Day 31 FastAPI ✅ → Day 33 SSE ✅ → Day 32 JWT ✅ → Day 34 Celery → Day 35 Docker
+                                                                 → Day 36 Alembic
+                                                                 → Day 37 pytest
+                                                                 → Day 38 structlog
+                                                                 → Day 33b Vue 前端
+                                                                 → Day 39 README → Day 40 上云
 ```
+
+**为什么 JWT 在 Celery 前面：** `export_report_pdf(self, report, ..., user_id)` 的 `user_id` 需要从登录用户身上拿。先做 JWT → `user_id` 是真实值；先做 Celery → `user_id` 只能写死，等 JWT 落地后还要回头改参数传递链，返工。
 
 **学习策略：** 每个技术现学现用。做完每天把经验写入 `decision-platform-plan.md` 对应 Phase 4 复盘区块。
 
@@ -120,7 +151,7 @@ Day 31 FastAPI ✅ → Day 32 JWT + Vue 脚手架 → Day 33 SSE ✅ → Day 33b
 | 天 | 任务 | 状态 |
 |----|------|------|
 | Day 31 | FastAPI + Swagger | ✅ 已提交 |
-| Day 32 | JWT 鉴权（注册/登录/Token + RBAC） | 🔄 |
+| Day 32 | JWT 鉴权（注册/登录/Token + RBAC） | ✅ 已提交 |
 | Day 33 | SSE 流式 | ✅ 已提交 |
 | Day 33b | Vue 3 前端 | ⏳ |
 | Day 34 | PDF/Excel 导出（Celery 异步） | ⏳ |
@@ -134,25 +165,26 @@ Day 31 FastAPI ✅ → Day 32 JWT + Vue 脚手架 → Day 33 SSE ✅ → Day 33b
 ### PostgreSQL 环境备忘
 
 ```
-服务名: postgresql-16
-数据目录: C:\Program Files\PostgreSQL\16\data\
+# 实际安装: D:\P_SQL\postgresql-16.14-1-windows-x64-binaries\pgsql\
+PG_BIN="D:/P_SQL/postgresql-16.14-1-windows-x64-binaries/pgsql/bin"
+PG_DATA="D:/P_SQL/postgresql-16.14-1-windows-x64-binaries/pgsql/data"
 认证方式: pg_hba.conf 中 127.0.0.1/32 和 ::1/128 改为 trust（本地免密码）
 连接参数: host=localhost port=5432 dbname=vantage user=postgres
 
-# 手动启动服务（管理员终端）
-net start postgresql-16
+# 启动 PostgreSQL（binaries 版本无 Windows 服务，需手动 pg_ctl）
+"$PG_BIN/pg_ctl" start -D "$PG_DATA" -l /tmp/pg_startup.log
 
 # 初始化数据目录（仅在安装后首次需要）
-pg_ctl init -D "C:\Program Files\PostgreSQL\16\data"
+"$PG_BIN/pg_ctl" init -D "$PG_DATA"
 
-# 重新加载配置（修改 pg_hba.conf 后）
-pg_ctl reload -D "C:\Program Files\PostgreSQL\16\data"
+# 停止 PostgreSQL
+"$PG_BIN/pg_ctl" stop -D "$PG_DATA"
 
 # 验证连接
-psql -U postgres -d vantage
+"$PG_BIN/psql" -U postgres -d vantage
 ```
 
-> **注意：** `services.msc` 中将 PostgreSQL 启动类型改为「自动」，否则每次重启需手动启动。
+> **注意：** 当前使用 binaries 版本而非 installer，无 Windows 服务。每次重启电脑后需手动 `pg_ctl start`。Docker 部署后此问题自动消失。
 
 ## 关键设计决策
 
@@ -374,7 +406,6 @@ dependencies = [
     "langgraph>=1.2",
     "langchain>=1.3",
     "langchain-openai>=1.2",
-    "langchain-community>=0.4",
     "python-dotenv>=1.0",
     "psycopg2-binary>=2.9.12",
     "redis>=5.0",
@@ -382,11 +413,14 @@ dependencies = [
     "celery[redis]>=5.4",
     "fastapi>=0.136.3",
     "uvicorn>=0.48.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "python-jose[cryptography]>=3.3",
+    "bcrypt>=4.1",
 ]
 
 # Phase 4 后续添加
-# "sqlalchemy", "alembic", "python-jose", "bcrypt",
-# "structlog", "reportlab", "openpyxl"
+# "alembic", "structlog", "reportlab", "openpyxl"
 ```
 
 ## Phase 4 Celery 异步导出架构
@@ -1007,7 +1041,7 @@ while True:
 
 - DeepSeek 配置通过 `API_KEY` / `BASE_URL` / `MODEL` 环境变量，不硬编码
 - Phase 1 全 Mock ✅ 已完成 → Phase 2 真实 PostgreSQL + ChromaDB ✅ 已完成 → Phase 3 Redis + 智能路由 ✅ 已完成
-- Phase 4 工程化落地进行中：FastAPI + JWT + Vue 3 + Celery 异步导出 + Docker Compose
+- Phase 4 工程化落地进行中：FastAPI ✅ + JWT ✅ + SSE ✅ + Vue 3 + Celery 异步导出 + Docker Compose
 - **Celery 只做导出，不碰 /query 主链路**（保持 SSE 流式）。graph/ 和 tools/ 零改动
 - 新增业务场景直接在 PostgreSQL + ChromaDB 上加数据，Agent 代码零改动
 - `log_agent_step` 函数签名为 Phase 2 SSE event 预留，Phase 演进时签名不变
