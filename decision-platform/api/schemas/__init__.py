@@ -1,7 +1,6 @@
-"""Pydantic 请求/响应模型。
+"""API Schema 定义。
 
-每个文件对应一组 API：
-- query.py: QueryRequest
-- auth.py: RegisterRequest / LoginRequest / TokenResponse (Day 32 新增)
-- export.py: ExportRequest / TaskStatusResponse (Day 34 新增)
+- query.py: QueryRequest（POST /query 请求体）
+- auth.py:  RegisterRequest / LoginRequest / RefreshRequest / TokenResponse（Day 32 新增）
+- export.py: 导出请求/响应模型（Day 34 新增）
 """
